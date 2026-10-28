@@ -1,47 +1,107 @@
-import { Usuario } from "@/types/usuario";
-import { addDoc, collection } from "firebase/firestore";
+import { addDoc, collection, doc, getDocs, query, updateDoc, where } from "firebase/firestore";
 import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { db } from "../../firebaseConfig";
 
 export default function TelaTentativas() {
-    const [lista, setLista] = useState<Usuario[]>([]);
     const [nomeUsuario, setNomeUsuario] = useState("");
-    const [tentativas, setTentativas] = useState(1);
+    const [tentativas, setTentativas] = useState(0);
     const [tentativa, setTentativa] = useState("");
+    const [ganhou, setGanhou] = useState(false);
 
     const [numeroSorteado, setNumeroSorteado] = useState(Math.floor(Math.random() * 100) + 1);
     console.log(numeroSorteado);
 
 
-    function inserir() {
+    async function adicionarTentativaUsuarioOuCriarUsuario(usuarioInserido: string, novaQuantidadeTentativa: number, usuarioVitorioso: boolean) {
+
+        try {
+            const usuarioRef = collection(db, 'usuarios');
+            const busca = query(usuarioRef, where('nomeUsuario', '==', usuarioInserido));
+            
+
+            const resultado = await getDocs(busca);
+
+            if (!resultado.empty) {
+                const documentoEncontrado = resultado.docs[0];
+                const idEncontrado = documentoEncontrado.id;
+                const dadosUsuario = documentoEncontrado.data();
+
+                if (dadosUsuario.ganhou == true) {
+                    Alert.alert("Este usuário já ganhou, selecione outro para continuar.");
+                    return false;
+
+                }
+
+                const dadosAtualizados: any ={tentativas: novaQuantidadeTentativa}
+
+                if(usuarioVitorioso){
+                    dadosAtualizados.ganhou = true
+                }
+
+
+                const usuarioRef = doc(db, 'usuarios', idEncontrado);
+
+                await updateDoc(usuarioRef, dadosAtualizados)
+            }
+
+            else {
+                inserir(novaQuantidadeTentativa, usuarioVitorioso)
+                return false
+            }
+        }
+
+
+        catch (e) {
+            console.error("Erro ao checar o usuário");
+            return false;
+        }
+
+    }
+
+
+    function inserir(quantidadeTentativasExata: number, usuarioVitorioso: boolean) {
+        if (!nomeUsuario) {
+            Alert.alert("É necessário inserir um usuário para jogar.");
+            return false;
+
+        }
+
         const prod = {
             nomeUsuario: nomeUsuario,
-            tentativa: tentativa,
-            tentativas: tentativas
+            tentativas: quantidadeTentativasExata,
+            ganhou: usuarioVitorioso
         }
 
         try {
-        
+
             addDoc(collection(db, 'usuarios'), prod);
             Alert.alert('Usuário inserido');
         } catch (e) {
             Alert.alert('Erro', String(e));
         }
     }
-    function somarNumeroTentativas() {
-        return setTentativas(tentativas + 1);
 
-    }
-
-    function verificarTentativa() {
+    async function verificarTentativa() {
         const tentativaNumero = parseInt(tentativa);
 
         if (tentativaNumero == numeroSorteado) {
             Alert.alert('Parabéns, você acertou :)')
+            setGanhou(true);
+            const totalFinal = tentativas + 1
+            await adicionarTentativaUsuarioOuCriarUsuario(nomeUsuario, totalFinal, true)
+
+            const novoNumero = Math.floor(Math.random() * 100) + 1;
+            setNumeroSorteado(novoNumero);
+            setNomeUsuario("");
+            setTentativa("");
+
         }
         else {
             Alert.alert('Número incorreto, tente novamente.')
+            const novoTotalTentativas = tentativas + 1;
+            setTentativas(novoTotalTentativas)
+            await adicionarTentativaUsuarioOuCriarUsuario(nomeUsuario, novoTotalTentativas, false);
             setTentativa('')
         }
 
@@ -57,7 +117,7 @@ export default function TelaTentativas() {
                 value={nomeUsuario}
                 onChangeText={setNomeUsuario} />
 
-            <Text>Insira sua tentativa: </Text>
+            <Text>Insira sua tentativa </Text>
             <TextInput
                 style={styles.input}
                 value={tentativa}
@@ -66,9 +126,7 @@ export default function TelaTentativas() {
             <Pressable
                 style={styles.botao_tentativa}
                 onPress={() => {
-                    somarNumeroTentativas();
                     verificarTentativa();
-                    inserir()
                 }}
             >
                 <Text>Realizar tentativa</Text>
@@ -102,9 +160,11 @@ const styles = StyleSheet.create({
         margin: 5
     },
     botao_tentativa: {
-        marginTop: 15,
         backgroundColor: '#008dde',
-        borderRadius: 4
+        padding: 15,
+        marginTop: 20,
+        borderRadius: 5,
+        alignItems: 'center'
 
     }
 });

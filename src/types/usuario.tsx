@@ -1,6 +1,7 @@
 type Usuario = { 
-  nome: string,
+  nomeUsuario: string,
   tentativas: number
 }
 
 export type { Usuario };
+
